@@ -1,4 +1,3 @@
-
 source("R/data_prep.R")
 
 # Define the color palette
@@ -16,7 +15,7 @@ party_colors <- c(
 )
 
 # gallup poll results (raw count)
-party_support |>
+gallup_party_support |>
     group_by(party, date) |>
     summarize(count = prod(support)) |>
     ggplot() +
@@ -30,4 +29,3 @@ party_support |>
     ggplot() +
     geom_line(aes(date, support, color = party), linewidth = 1) +
     scale_color_manual(values = party_colors)
-
