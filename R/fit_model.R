@@ -122,3 +122,15 @@ fit$draws("pi_now") |>
     -1,
     palette = "Greys"
   )
+
+
+pi_draws <- fit$draws("pi_now") |>
+  as_draws_df() |>
+  as_tibble() |>
+  pivot_longer(
+    c(-.chain, -.iteration, -.draw)
+  ) |>
+  mutate(
+    flokkur = colnames(y)[parse_number(name)]
+  )
+write_csv(pi_draws, here("data", "pi_draws.csv"))
