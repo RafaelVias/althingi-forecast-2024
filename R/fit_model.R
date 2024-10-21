@@ -7,25 +7,21 @@ library(gt)
 library(gtExtras)
 
 # read data
-sheets_data <- read_csv(here("data", "sheets_data.csv"))
 gallup_data <- read_csv(here("data", "gallup_data.csv"))
+maskina_data <- read_csv(here("data", "maskina_data.csv"))
+prosent_data <- read_csv(here("data", "prosent_data.csv"))
 
 # combine data
 data <- bind_rows(
-  sheets_data,
-  gallup_data |>
-    filter(
-      date >= clock::date_build(2024, 9, 1)
-    ) |>
-    mutate(
-      date = clock::date_build(2024, 10, 1)
-    )
+  maskina_data,
+  prosent_data,
+  gallup_data
 ) |>
   mutate(
     flokkur = if_else(flokkur == "Lýðræðisflokkurinn", "Annað", flokkur)
   ) |>
   filter(
-    date == clock::date_build(2024, 10, 1)
+    date >= clock::date_build(2023, 1, 1)
   ) |>
   arrange(date, fyrirtaeki, flokkur)
 
@@ -66,7 +62,8 @@ stan_data <- list(
   N = N,
   y = y,
   house = house,
-  date = date
+  date = date,
+  N_now = 300000
 )
 
 model <- cmdstan_model(
@@ -81,31 +78,67 @@ fit <- model$sample(
 )
 
 
-fit$summary("gamma")
-
-mcmc_areas(
-  as_draws_matrix(fit$draws("gamma")),
-  regex_pars = "gamma",
-)
-
-mcmc_areas(
-  as_draws_matrix(fit$draws("beta")),
-  regex_pars = "beta",
-)
-
-mcmc_areas(
-  as_draws_matrix(fit$draws("y_now")),
-  regex_pars = "y_now",
-)
-
-fit$draws("pi_now") |>
-  as_draws_df() |>
-  summarise_draws() |>
+fit$summary("y_rep", mean, ~ quantile(.x, probs = seq(0.05, 0.95, by = 0.05))) |>
+  pivot_longer(c(-variable, -mean)) |>
   mutate(
-    flokkur = colnames(y),
-    flokkur = fct_reorder(flokkur, mean)
+    prob = parse_number(name),
+    coverage = 2 * abs(50 - prob),
+    which = if_else(prob < 50, "lower", "upper")
   ) |>
+  filter(prob != 50) |>
+  select(-prob, -name) |>
+  pivot_wider(names_from = which, values_from = value) |>
+  mutate(
+    t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(y)[p],
+    dags = unique(data$date)[t]
+  ) |>
+  group_by(dags, coverage) |>
+  mutate_at(
+    vars(mean, lower, upper),
+    ~ .x / sum(.x)
+  ) |>
+  ungroup() |>
+  left_join(
+    data |>
+      mutate(p = n / sum(n), .by = c(date, fyrirtaeki)) |>
+      select(dags = date, fyrirtaeki, flokkur, konnun = p),
+    by = join_by(dags, flokkur),
+    relationship = "many-to-many"
+  ) |>
+  ggplot(aes(dags, mean)) +
+  stat_smooth(
+    geom = "line",
+    method = "loess",
+    span = 0.5,
+    aes(col = flokkur),
+    linewidth = 1
+  ) +
+  geom_point(aes(y = konnun, col = flokkur))
+
+
+
+fit$summary("y_rep") |>
+  select(variable, mean, q5, q95) |>
+  mutate(
+    t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(y)[p],
+    dags = unique(data$date)[t]
+  ) |>
+  group_by(dags) |>
+  mutate_at(
+    vars(mean, q5, q95),
+    ~ .x / sum(.x)
+  ) |>
+  ungroup() |>
+  filter(dags == max(dags)) |>
   select(flokkur, mean, q5, q95) |>
+  arrange(desc(mean)) |>
+  mutate(
+    plot_col = mean
+  ) |>
   gt() |>
   cols_label(
     flokkur = "Flokkur",
@@ -117,20 +150,73 @@ fit$draws("pi_now") |>
     label = "95% Öryggisbil",
     columns = c(q5, q95)
   ) |>
+  cols_align(
+    align = "left",
+    columns = 1
+  ) |>
   fmt_percent() |>
   gt_color_rows(
     -1,
-    palette = "Greys"
+    palette = "Greys",
+    domain = c(0, 0.5)
+  ) |>
+  cols_nanoplot(
+    columns = plot_col,
+    plot_type = "bar",
+    after = 1,
+    autoscale = TRUE,
+    new_col_label = "Fylgi",
+    options = nanoplot_options(
+      data_bar_fill_color = "grey",
+      data_bar_stroke_color = "grey",
+      data_bar_stroke_width = 0.5
+    )
+  ) |>
+  tab_header(
+    title = "Fylgi stjórnmálaflokka samkvæmt nýjustu könnunum"
+  ) |>
+  tab_footnote(
+    "Niðurstöður kannanar eru vegnar saman með stigskipti Bayesísku líkani"
   )
 
 
-pi_draws <- fit$draws("pi_now") |>
+y_rep_draws <- fit$draws("y_rep") |>
   as_draws_df() |>
   as_tibble() |>
   pivot_longer(
     c(-.chain, -.iteration, -.draw)
   ) |>
   mutate(
-    flokkur = colnames(y)[parse_number(name)]
+    t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(y)[p],
+    dags = unique(data$date)[t]
+  ) |>
+  select(
+    .chain,
+    .iteration,
+    .draw,
+    dags,
+    flokkur,
+    value
   )
-write_csv(pi_draws, here("data", "pi_draws.csv"))
+write_csv(y_rep_draws, here("data", "y_rep_draws.csv"))
+
+
+theme_set(metill::theme_metill())
+
+fit$summary("gamma") |>
+  select(variable, mean) |>
+  mutate(
+    p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
+    h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(y)[p],
+    fyrirtaeki = unique(data$fyrirtaeki)[h]
+  ) |>
+  filter(flokkur != "Annað") |>
+  ggplot(aes(0, flokkur, col = fyrirtaeki)) +
+  geom_segment(
+    aes(xend = mean, yend = flokkur),
+    position = position_jitter(width = 0, height = 0.2),
+    arrow = arrow(length = unit(0.4, "cm"), type = "closed")
+  )
