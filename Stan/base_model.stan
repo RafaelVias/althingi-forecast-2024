@@ -3,7 +3,9 @@ data {
   int<lower = 1> P;                        // Number of parties
   int<lower = 1> H;                        // Number of polling houses
   int<lower = 1> N;                        // Number of date x house observations
+
   array[N, P] int<lower = 0> y;           // Polling data (counts per party)
+
   array[N] int<lower = 1, upper = H> house; // House indicator for each poll
   array[N] int<lower = 1, upper = T> date;  // Date indicator for each poll
 }
@@ -20,8 +22,9 @@ model {
     for (t in 2:T) {
       beta[p, t] ~ normal(beta[p, t - 1], 1);
     }
-    gamma[p, ] ~ normal(0, 1);
-    sum(gamma[p, ]) ~ normal(0, 0.01);
+    gamma[p, 1] ~ normal(0, 0.0001);  // Elections have no house effect
+    gamma[p, 2:H] ~ normal(0, 1);
+    sum(gamma[p, 2:H]) ~ normal(0, 0.01);
   }
 
 

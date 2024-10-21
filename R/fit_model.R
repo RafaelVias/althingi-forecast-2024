@@ -10,18 +10,26 @@ library(gtExtras)
 gallup_data <- read_csv(here("data", "gallup_data.csv"))
 maskina_data <- read_csv(here("data", "maskina_data.csv"))
 prosent_data <- read_csv(here("data", "prosent_data.csv"))
-
+felagsvisindastofnun_data <- read_csv(here("data", "felagsvisindastofnun_data.csv"))
+election_data <- read_csv(here("data", "election_data.csv"))
 # combine data
 data <- bind_rows(
   maskina_data,
   prosent_data,
-  gallup_data
+  felagsvisindastofnun_data,
+  gallup_data,
+  election_data
 ) |>
   mutate(
-    flokkur = if_else(flokkur == "Lýðræðisflokkurinn", "Annað", flokkur)
+    flokkur = if_else(flokkur == "Lýðræðisflokkurinn", "Annað", flokkur),
+    fyrirtaeki = fct_relevel(
+      as_factor(fyrirtaeki),
+      "Kosning"
+    )
   ) |>
   filter(
-    date >= clock::date_build(2023, 1, 1)
+    date >= clock::date_build(2021, 1, 1),
+    flokkur != "Annað"
   ) |>
   arrange(date, fyrirtaeki, flokkur)
 
@@ -62,8 +70,7 @@ stan_data <- list(
   N = N,
   y = y,
   house = house,
-  date = date,
-  N_now = 300000
+  date = date
 )
 
 model <- cmdstan_model(
@@ -119,21 +126,29 @@ fit$summary("y_rep", mean, ~ quantile(.x, probs = seq(0.05, 0.95, by = 0.05))) |
 
 
 
-fit$summary("y_rep") |>
-  select(variable, mean, q5, q95) |>
+fit$draws("y_rep") |>
+  as_draws_df() |>
+  as_tibble() |>
+  pivot_longer(
+    c(-.chain, -.iteration, -.draw)
+  ) |>
   mutate(
-    t = str_match(variable, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
-    p = str_match(variable, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    t = str_match(name, "y_rep\\[(.*),.*\\]")[, 2] |> parse_number(),
+    p = str_match(name, "y_rep\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = colnames(y)[p],
     dags = unique(data$date)[t]
   ) |>
-  group_by(dags) |>
-  mutate_at(
-    vars(mean, q5, q95),
-    ~ .x / sum(.x)
-  ) |>
-  ungroup() |>
   filter(dags == max(dags)) |>
+  mutate(
+    value = value / sum(value),
+    .by = c(.iteration, .chain, .draw)
+  ) |>
+  summarise(
+    mean = mean(value),
+    q5 = quantile(value, 0.05),
+    q95 = quantile(value, 0.95),
+    .by = flokkur
+  ) |>
   select(flokkur, mean, q5, q95) |>
   arrange(desc(mean)) |>
   mutate(
@@ -213,7 +228,6 @@ fit$summary("gamma") |>
     flokkur = colnames(y)[p],
     fyrirtaeki = unique(data$fyrirtaeki)[h]
   ) |>
-  filter(flokkur != "Annað") |>
   ggplot(aes(0, flokkur, col = fyrirtaeki)) +
   geom_segment(
     aes(xend = mean, yend = flokkur),

@@ -3,6 +3,7 @@ library(ggiraph)
 library(metill)
 library(patchwork)
 library(here)
+Sys.setlocale("LC_ALL", "is_IS.UTF-8")
 
 theme_set(theme_metill())
 
@@ -24,12 +25,14 @@ colors <- tribble(
 gallup_data <- read_csv(here("data", "gallup_data.csv"))
 maskina_data <- read_csv(here("data", "maskina_data.csv"))
 prosent_data <- read_csv(here("data", "prosent_data.csv"))
+felagsvisindastofnun_data <- read_csv(here("data", "felagsvisindastofnun_data.csv"))
 
 # combine data
 poll_data <- bind_rows(
   maskina_data,
   prosent_data,
-  gallup_data
+  gallup_data,
+  felagsvisindastofnun_data
 ) |>
   mutate(
     flokkur = if_else(flokkur == "Lýðræðisflokkurinn", "Annað", flokkur)
@@ -52,6 +55,8 @@ d <- read_csv("data/y_rep_draws.csv") |>
   ) |> 
   summarise(
     mean = mean(value),
+    q5 = quantile(value, 0.05),
+    q95 = quantile(value, 0.95),
     .by = c(dags, flokkur)
   ) |> 
   inner_join(
@@ -88,7 +93,7 @@ p1 <- d |>
     labels = label_percent()
   ) +
   scale_colour_identity() +
-  coord_cartesian(clip = "off", xlim = c(-0.035, NA)) +
+  coord_cartesian(clip = "off", xlim = c(-0.1, NA)) +
   theme(
     plot.margin = margin(5, 15, 5, 15),
     axis.text.y = element_blank(),
@@ -103,18 +108,102 @@ p1 <- d |>
 
 p2 <- d |> 
   ggplot(aes(dags, mean, colour = litur, data_id = flokkur)) +
+  geom_vline(
+    xintercept = clock::date_build(2024, 11, 30),
+    alpha = 0.4
+  ) +
+  annotate(
+    geom = "label",
+    label = "Kosningar 30. nóvember",
+    x = clock::date_build(2024, 11, 30),
+    y = 0.18,
+    hjust = 0.5,
+    angle = 90,
+    fill = "#faf9f9"
+  ) +
   geom_smooth_interactive(
     method = "loess",
-    span = 0.4,
-    se = 0
+    span = 0.12,
+    se = 0,
+    n = 500
   ) +
   geom_point_interactive(
-    aes(y = p_poll)
+    aes(y = p_poll),
+    alpha = 0.3
   ) +
   scale_x_date(
-    guide = ggh4x::guide_axis_truncated(),
+    guide = ggh4x::guide_axis_truncated(
+      trunc_upper = clock::date_build(2024, 11, 30)
+    ),
     limits = c(NA_Date_, clock::date_build(2024, 11, 30)),
-    labels = label_date_short()
+    labels = label_date_short(),
+    breaks = clock::date_build(
+      2024,
+      c(
+        8, 8, 8, 8,
+        9, 9, 9, 9, 
+        10, 10, 10, 10, 
+        11, 11, 11, 11, 11
+      ),
+      c(
+        1, 8, 15, 22,
+        1, 8, 15, 22, 
+        1, 8, 15, 22, 
+        1, 8, 15, 22, 30
+      )
+    )
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 0.3, by = 0.05),
+    guide = ggh4x::guide_axis_truncated(),
+    labels = label_percent()
+  ) +
+  scale_colour_identity() +
+  coord_cartesian(
+    xlim = clock::date_build(2024, c(8, 11), c(1, 30))
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    subtitle = "Kapphlaupið"
+  )
+
+p3 <- d |> 
+  ggplot(aes(dags, mean, colour = litur, data_id = flokkur)) +
+  geom_vline(
+    xintercept = clock::date_build(2024, 11, 30),
+    alpha = 0.4
+  ) +
+  annotate(
+    geom = "label",
+    label = "Kosningar 30. nóvember",
+    x = clock::date_build(2024, 11, 30),
+    y = 0.18,
+    hjust = 0.5,
+    angle = 90,
+    fill = "#faf9f9"
+  ) +
+  geom_smooth_interactive(
+    method = "loess",
+    span = 0.25,
+    se = 0,
+    n = 500
+  ) +
+  geom_point_interactive(
+    aes(y = p_poll),
+    alpha = 0.2
+  ) +
+  scale_x_date(
+    guide = ggh4x::guide_axis_truncated(
+      trunc_upper = clock::date_build(2024, 11, 30)
+    ),
+    limits = c(NA_Date_, clock::date_build(2024, 11, 30)),
+    labels = label_date_short(),
+    breaks = seq.Date(
+      from = clock::date_build(2021, 1),
+      to = clock::date_build(2024, 11, 30),
+      by = "2 month"
+    )
   ) +
   scale_y_continuous(
     breaks = seq(0, 0.3, by = 0.05),
@@ -125,15 +214,24 @@ p2 <- d |>
   labs(
     x = NULL,
     y = NULL,
-    subtitle = "Fylgisþróun"
+    subtitle = "Fylgisþróun",
+    caption = "Unnið af Brynjólfi Gauta Guðrúnar Jónssyni og Rafael Daniel Vias"
   )
 
+design <- "
+AABB
+CCCC
+"
 
 p <- wrap_plots(
-  p1, p2,
-  ncol = 1,
+  p1, p2, p3,
+  design = design,
   heights = c(0.7, 1)
-)
+) +
+  plot_annotation(
+    title = "Fylgi stjórnmálaflokka",
+    subtitle = "Niðustöður mismunandi kannana vegnar saman með Bayesísku tölfræðilíkani"
+  )
 
 girafe(
   ggobj = p,
@@ -153,3 +251,4 @@ girafe(
     opts_zoom(max = 1)
   )
 )
+
