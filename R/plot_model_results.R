@@ -88,12 +88,14 @@ p1 <- d |>
     size = 2.5
   ) +
   scale_x_continuous(
-    breaks = seq(0, 0.3, by = 0.05),
-    guide = ggh4x::guide_axis_truncated(),
+    breaks = seq(0, 0.25, by = 0.05),
+    guide = ggh4x::guide_axis_truncated(
+      trunc_upper = 0.25
+    ),
     labels = label_percent()
   ) +
   scale_colour_identity() +
-  coord_cartesian(clip = "off", xlim = c(-0.1, NA)) +
+  coord_cartesian(clip = "off", xlim = c(-0.1, 0.25)) +
   theme(
     plot.margin = margin(5, 15, 5, 15),
     axis.text.y = element_blank(),
@@ -229,7 +231,7 @@ p <- wrap_plots(
   heights = c(0.7, 1)
 ) +
   plot_annotation(
-    title = "Fylgi stjórnmálaflokka",
+    title = "Samantekt á fylgi stjórnmálaflokka",
     subtitle = "Niðustöður mismunandi kannana vegnar saman með Bayesísku tölfræðilíkani"
   )
 

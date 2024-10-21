@@ -5,7 +5,7 @@ library(bayesplot)
 library(posterior)
 library(gt)
 library(gtExtras)
-
+library(arrow)
 # read data
 gallup_data <- read_csv(here("data", "gallup_data.csv"))
 maskina_data <- read_csv(here("data", "maskina_data.csv"))
@@ -215,8 +215,9 @@ y_rep_draws <- fit$draws("y_rep") |>
     flokkur,
     value
   )
-write_csv(y_rep_draws, here("data", "y_rep_draws.csv"))
 
+write_csv(y_rep_draws, here("data", "y_rep_draws.csv"))
+write_parquet(y_rep_draws, here("data", "y_rep_draws.parquet"))
 
 theme_set(metill::theme_metill())
 
@@ -226,11 +227,25 @@ fit$summary("gamma") |>
     p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
     h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
     flokkur = colnames(y)[p],
-    fyrirtaeki = unique(data$fyrirtaeki)[h]
+    fyrirtaeki = levels(data$fyrirtaeki)[h]
   ) |>
   ggplot(aes(0, flokkur, col = fyrirtaeki)) +
   geom_segment(
     aes(xend = mean, yend = flokkur),
-    position = position_jitter(width = 0, height = 0.2),
+    position = position_jitter(width = 0, height = 0.3),
     arrow = arrow(length = unit(0.4, "cm"), type = "closed")
+  ) +
+  scale_colour_brewer(
+    palette = "Set1"
   )
+
+
+fit$summary("gamma") |>
+  select(variable, mean) |>
+  mutate(
+    p = str_match(variable, "gamma\\[(.*),.*\\]")[, 2] |> parse_number(),
+    h = str_match(variable, "gamma\\[.*,(.*)\\]")[, 2] |> parse_number(),
+    flokkur = colnames(y)[p],
+    fyrirtaeki = unique(data$fyrirtaeki)[h]
+  ) |>
+  View()
