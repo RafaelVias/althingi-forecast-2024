@@ -1,2 +1,2 @@
-# althingi-forecast-2025
-Forecasting model and data analysis for the 2025 Icelandic parliamentary elections
+# althingi-forecast-2024
+Forecasting model and data analysis for the 2024 Icelandic parliamentary elections
