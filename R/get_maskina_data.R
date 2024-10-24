@@ -12,6 +12,16 @@ maskina_data <- read_sheet(
 out <- maskina_data |>
   janitor::clean_names() |>
   mutate(
+    total_hlutfall = sum(hlutfall),
+    total_not_annad = sum(hlutfall * (flokkur != "Annað")),
+    hlutfall = if_else(
+      flokkur == "Annað",
+      1 - total_not_annad,
+      hlutfall
+    ),
+    .by = c(ar, manudur, dagur)
+  ) |>
+  mutate(
     dagur = coalesce(dagur, 15),
     date = clock::date_build(ar, manudur, dagur),
     n = hlutfall * fjoldi_alls

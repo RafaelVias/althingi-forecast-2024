@@ -29,13 +29,15 @@ prosent_data <- read_csv(here("data", "prosent_data.csv"))
 felagsvisindastofnun_data <- read_csv(here("data", "felagsvisindastofnun_data.csv"))
 election_data <- read_csv(here("data", "election_data.csv")) |>
   mutate(
-    p = n / sum(n)
+    p = n / sum(n),
+    .by = date
   ) |>
   inner_join(
     colors
   ) |>
   filter(
-    flokkur != "Annað"
+    flokkur != "Annað",
+    date >= clock::date_build(2021, 1, 1)
   )
 
 # combine data
@@ -57,6 +59,9 @@ poll_data <- bind_rows(
     fyrirtaeki,
     flokkur,
     p_poll = p
+  ) |>
+  filter(
+    dags >= clock::date_build(2021, 1, 1)
   )
 
 d <- read_parquet(here("data", "y_rep_draws.parquet")) |>
@@ -84,48 +89,6 @@ coverage_data <- read_parquet(here("data", "y_rep_draws.parquet")) |>
     colors
   )
 
-coverage_data |>
-  filter(
-    dags == max(dags)
-  ) |>
-  mutate(
-    flokkur = fct_reorder(flokkur, upper)
-  ) |>
-  ggplot(aes(
-    y = flokkur,
-    color = litur,
-    group = paste(flokkur, coverage)
-  )) +
-  geom_segment(
-    aes(
-      x = lower,
-      xend = upper,
-      alpha = -coverage
-    ),
-    linewidth = 5
-  ) +
-  scale_color_identity() +
-  scale_x_continuous(
-    labels = label_percent(),
-    guide = ggh4x::guide_axis_truncated(
-      trunc_lower = 0,
-      trunc_upper = 0.30
-    )
-  ) +
-  scale_y_discrete(
-    guide = ggh4x::guide_axis_truncated()
-  ) +
-  scale_alpha_continuous(
-    range = c(0, 0.4)
-  ) +
-  theme(
-    legend.position = "none"
-  ) +
-  labs(
-    x = NULL,
-    y = NULL,
-    title = "Fylgisspá á kosningadag"
-  )
 
 
 p1 <- d |>
@@ -232,6 +195,7 @@ p2 <- d |>
   ) +
   scale_y_continuous(
     breaks = seq(0, 0.3, by = 0.05),
+    limits = c(0, 0.3),
     guide = ggh4x::guide_axis_truncated(),
     labels = label_percent()
   ) +
@@ -297,6 +261,7 @@ p3 <- d |>
   ) +
   scale_y_continuous(
     breaks = seq(0, 0.3, by = 0.05),
+    limits = c(0, 0.3),
     guide = ggh4x::guide_axis_truncated(),
     labels = label_percent()
   ) +

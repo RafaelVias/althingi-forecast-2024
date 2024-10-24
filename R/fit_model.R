@@ -7,10 +7,12 @@ library(gt)
 library(gtExtras)
 library(arrow)
 # read data
-gallup_data <- read_csv(here("data", "gallup_data_combined.csv"))
+gallup_data <- read_csv(here("data", "gallup_data.csv"))
 maskina_data <- read_csv(here("data", "maskina_data.csv"))
 prosent_data <- read_csv(here("data", "prosent_data.csv"))
-felagsvisindastofnun_data <- read_csv(here("data", "felagsvisindastofnun_data.csv"))
+felagsvisindastofnun_data <- read_csv(
+  here("data", "felagsvisindastofnun_data.csv")
+)
 election_data <- read_csv(here("data", "election_data.csv"))
 # combine data
 data <- bind_rows(
@@ -40,8 +42,7 @@ N <- data |>
   distinct(fyrirtaeki, date) |>
   nrow()
 
-data |>
-  count(fyrirtaeki, date, sort = TRUE)
+
 y <- data |>
   select(date, fyrirtaeki, flokkur, n) |>
   mutate(
@@ -78,6 +79,12 @@ time_diff <- data |>
 max_date <- max(data$date)
 election_date <- clock::date_build(2024, 11, 30)
 pred_y_time_diff <- as.numeric(election_date - max_date)
+stjornarslit <- data |>
+  pivot_wider(names_from = flokkur, values_from = n, values_fill = 0) |>
+  mutate(
+    stjornarslit = 1 * (date >= clock::date_build(2024, 10, 14))
+  ) |>
+  pull(stjornarslit)
 
 stan_data <- list(
   D = D,
@@ -89,8 +96,11 @@ stan_data <- list(
   date = date,
   time_diff = time_diff,
   pred_y_time_diff = pred_y_time_diff,
+  stjornarslit = stjornarslit,
   n_pred = as.integer(sum(election_data$n)),
-  sigma_house_sum = 0.05
+  sigma_house_sum = 1,
+  sigma_house = 0.2,
+  sigma_stjornarslit = 0.2
 )
 
 model <- cmdstan_model(
@@ -100,8 +110,9 @@ model <- cmdstan_model(
 init <- list(
   sigma = rep(1, P),
   beta_0 = rep(0, P),
-  z_beta = matrix(0, P, D + 1),
-  gamma_raw = matrix(0, P, H - 1)
+  z_beta = matrix(0, P, D),
+  gamma_raw = matrix(0, P, H - 1),
+  phi_inv = 1,
 )
 
 fit <- model$sample(
@@ -118,6 +129,11 @@ fit$summary("sigma") |>
     flokkur = colnames(y),
     .before = variable
   )
+
+fit$summary("phi_inv")
+
+fit$summary("beta_stjornarslit")
+
 
 
 dates <- c(unique(data$date), election_date)
@@ -291,15 +307,63 @@ fit$summary("gamma") |>
     palette = "Set1"
   )
 
-fit$summary("gamma_raw") |>
-  select(variable, mean) |>
+fit$summary("industry_bias") |>
   mutate(
-    p = str_match(variable, "gamma_raw\\[(.*),.*\\]")[, 2] |> parse_number(),
-    h = str_match(variable, "gamma_raw\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
-    fyrirtaeki = levels(data$fyrirtaeki)[h + 1]
+    flokkur = colnames(y) |>
+      as_factor() |>
+      fct_reorder(mean),
+    .before = variable
   ) |>
-  summarise(
-    mean = mean(mean),
-    .by = flokkur
+  ggplot(aes(mean, flokkur)) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_point(
+    size = 3
+  ) +
+  geom_segment(
+    aes(x = q5, xend = q95, y = flokkur, yend = flokkur),
+    alpha = 0.5
+  ) +
+  scale_x_continuous(
+    breaks = breaks_width(width = 0.1),
+    guide = ggh4x::guide_axis_truncated(
+      trunc_lower = -0.4,
+      trunc_upper = 0.4
+    )
+  ) +
+  scale_y_discrete(
+    guide = ggh4x::guide_axis_truncated()
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Heildarbjagi í mati á fylgi flokka",
+    subtitle = "Sýnt á log-odds kvarða"
+  )
+
+
+fit$summary("beta_stjornarslit") |>
+  mutate(
+    flokkur = colnames(y) |>
+      as_factor() |>
+      fct_reorder(mean),
+    .before = variable
+  ) |>
+  ggplot(aes(mean, flokkur)) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_point(
+    size = 3
+  ) +
+  geom_segment(
+    aes(x = q5, xend = q95, y = flokkur, yend = flokkur),
+    alpha = 0.5
+  ) +
+  scale_x_continuous(
+    breaks = breaks_width(width = 0.1),
+    guide = ggh4x::guide_axis_truncated(
+      trunc_lower = -0.4,
+      trunc_upper = 0.4
+    )
+  ) +
+  scale_y_discrete(
+    guide = ggh4x::guide_axis_truncated()
   )

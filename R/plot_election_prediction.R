@@ -46,6 +46,15 @@ coverage_data <- read_parquet(here("data", "y_rep_draws.parquet")) |>
     colors
   )
 
+write_parquet(
+  coverage_data,
+  here(
+    "results",
+    "Predictions",
+    glue("coverage_data_{today_date}.parquet")
+  )
+)
+
 p <- coverage_data |>
   filter(
     dags == max(dags)
@@ -122,8 +131,6 @@ p <- coverage_data |>
     subtitle = "Línustrik tákna miðgildi spár og hver kassi inniheldur 5% af niðurstöðum spár",
     caption = caption
   )
-
-p
 
 ggsave(
   here("Figures", "Preds", glue("election_prediction_{today_date}.png")),
