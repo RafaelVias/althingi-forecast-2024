@@ -10,7 +10,8 @@ d <- tribble(
   "2021-09-25", "Vinstri Græn", 0.126,
   "2021-09-25", "Flokkur Fólksins", 0.088,
   "2021-09-25", "Viðreisn", 0.083,
-  "2021-09-25", "Píratar", 0.086
+  "2021-09-25", "Píratar", 0.086,
+  "2021-09-25", "Sósíalistaflokkurinn", 0.041
 )
 
 out <- d |>

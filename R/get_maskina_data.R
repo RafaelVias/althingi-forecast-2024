@@ -12,7 +12,8 @@ maskina_data <- read_sheet(
 out <- maskina_data |>
   janitor::clean_names() |>
   mutate(
-    date = clock::date_build(ar, manudur),
+    dagur = coalesce(dagur, 15),
+    date = clock::date_build(ar, manudur, dagur),
     n = hlutfall * fjoldi_alls
   ) |>
   select(

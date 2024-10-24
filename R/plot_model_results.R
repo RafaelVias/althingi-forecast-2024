@@ -3,6 +3,7 @@ library(ggiraph)
 library(metill)
 library(patchwork)
 library(here)
+library(arrow)
 Sys.setlocale("LC_ALL", "is_IS.UTF-8")
 
 theme_set(theme_metill())
@@ -22,10 +23,20 @@ colors <- tribble(
 )
 
 # read data
-gallup_data <- read_csv(here("data", "gallup_data.csv"))
+gallup_data <- read_csv(here("data", "gallup_data_combined.csv"))
 maskina_data <- read_csv(here("data", "maskina_data.csv"))
 prosent_data <- read_csv(here("data", "prosent_data.csv"))
 felagsvisindastofnun_data <- read_csv(here("data", "felagsvisindastofnun_data.csv"))
+election_data <- read_csv(here("data", "election_data.csv")) |>
+  mutate(
+    p = n / sum(n)
+  ) |>
+  inner_join(
+    colors
+  ) |>
+  filter(
+    flokkur != "Annað"
+  )
 
 # combine data
 poll_data <- bind_rows(
@@ -40,7 +51,7 @@ poll_data <- bind_rows(
   mutate(
     p = n / sum(n),
     .by = c(date, fyrirtaeki)
-  ) |> 
+  ) |>
   select(
     dags = date,
     fyrirtaeki,
@@ -48,30 +59,81 @@ poll_data <- bind_rows(
     p_poll = p
   )
 
-d <- read_csv("data/y_rep_draws.csv") |> 
-  mutate(
-    value = value / sum(value),
-    .by = c(.iteration, .chain, .draw, dags)
-  ) |> 
+d <- read_parquet(here("data", "y_rep_draws.parquet")) |>
   summarise(
     mean = mean(value),
     q5 = quantile(value, 0.05),
     q95 = quantile(value, 0.95),
     .by = c(dags, flokkur)
-  ) |> 
+  ) |>
   inner_join(
     colors
-  ) |> 
-  inner_join(
+  ) |>
+  left_join(
     poll_data
   )
 
+coverage_data <- read_parquet(here("data", "y_rep_draws.parquet")) |>
+  reframe(
+    coverage = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95),
+    lower = quantile(value, 0.5 - coverage / 2),
+    upper = quantile(value, 0.5 + coverage / 2),
+    .by = c(dags, flokkur)
+  ) |>
+  inner_join(
+    colors
+  )
 
-p1 <- d |> 
-  filter(dags == max(dags)) |> 
+coverage_data |>
+  filter(
+    dags == max(dags)
+  ) |>
+  mutate(
+    flokkur = fct_reorder(flokkur, upper)
+  ) |>
+  ggplot(aes(
+    y = flokkur,
+    color = litur,
+    group = paste(flokkur, coverage)
+  )) +
+  geom_segment(
+    aes(
+      x = lower,
+      xend = upper,
+      alpha = -coverage
+    ),
+    linewidth = 5
+  ) +
+  scale_color_identity() +
+  scale_x_continuous(
+    labels = label_percent(),
+    guide = ggh4x::guide_axis_truncated(
+      trunc_lower = 0,
+      trunc_upper = 0.30
+    )
+  ) +
+  scale_y_discrete(
+    guide = ggh4x::guide_axis_truncated()
+  ) +
+  scale_alpha_continuous(
+    range = c(0, 0.4)
+  ) +
+  theme(
+    legend.position = "none"
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Fylgisspá á kosningadag"
+  )
+
+
+p1 <- d |>
+  filter(dags == max(dags)) |>
+  distinct(flokkur, mean, litur) |>
   mutate(
     flokkur_ordered = fct_reorder(flokkur, mean)
-  ) |> 
+  ) |>
   ggplot(aes(mean, flokkur_ordered, color = litur, data_id = flokkur)) +
   geom_text_interactive(
     aes(label = flokkur, x = 0),
@@ -108,7 +170,7 @@ p1 <- d |>
     subtitle = "Staðan í nýjustu könnunum"
   )
 
-p2 <- d |> 
+p2 <- d |>
   ggplot(aes(dags, mean, colour = litur, data_id = flokkur)) +
   geom_vline(
     xintercept = clock::date_build(2024, 11, 30),
@@ -120,14 +182,27 @@ p2 <- d |>
     x = clock::date_build(2024, 11, 30),
     y = 0.18,
     hjust = 0.5,
+    vjust = 1,
     angle = 90,
     fill = "#faf9f9"
   ) +
-  geom_smooth_interactive(
-    method = "loess",
-    span = 0.12,
-    se = 0,
-    n = 500
+  geom_ribbon_interactive(
+    data = coverage_data,
+    aes(
+      x = dags,
+      ymin = lower,
+      ymax = upper,
+      fill = litur,
+      alpha = -coverage,
+      group = paste(flokkur, coverage),
+      data_id = flokkur
+    ),
+    col = NA,
+    inherit.aes = FALSE,
+    show.legend = FALSE
+  ) +
+  geom_line_interactive(
+    data = ~ filter(.x, dags != max(dags))
   ) +
   geom_point_interactive(
     aes(y = p_poll),
@@ -143,14 +218,14 @@ p2 <- d |>
       2024,
       c(
         8, 8, 8, 8,
-        9, 9, 9, 9, 
-        10, 10, 10, 10, 
+        9, 9, 9, 9,
+        10, 10, 10, 10,
         11, 11, 11, 11, 11
       ),
       c(
         1, 8, 15, 22,
-        1, 8, 15, 22, 
-        1, 8, 15, 22, 
+        1, 8, 15, 22,
+        1, 8, 15, 22,
         1, 8, 15, 22, 30
       )
     )
@@ -161,6 +236,10 @@ p2 <- d |>
     labels = label_percent()
   ) +
   scale_colour_identity() +
+  scale_fill_identity() +
+  scale_alpha_continuous(
+    range = c(0, 0.1)
+  ) +
   coord_cartesian(
     xlim = clock::date_build(2024, c(8, 11), c(1, 30))
   ) +
@@ -170,7 +249,7 @@ p2 <- d |>
     subtitle = "Kapphlaupið"
   )
 
-p3 <- d |> 
+p3 <- d |>
   ggplot(aes(dags, mean, colour = litur, data_id = flokkur)) +
   geom_vline(
     xintercept = clock::date_build(2024, 11, 30),
@@ -182,18 +261,27 @@ p3 <- d |>
     x = clock::date_build(2024, 11, 30),
     y = 0.18,
     hjust = 0.5,
+    vjust = 1,
     angle = 90,
     fill = "#faf9f9"
   ) +
   geom_smooth_interactive(
+    data = ~ filter(.x, dags != max(dags)),
     method = "loess",
-    span = 0.25,
+    span = 0.2,
     se = 0,
     n = 500
   ) +
   geom_point_interactive(
     aes(y = p_poll),
     alpha = 0.2
+  ) +
+  geom_point_interactive(
+    data = election_data,
+    aes(y = p, x = date),
+    alpha = 1,
+    size = 4,
+    shape = "X"
   ) +
   scale_x_date(
     guide = ggh4x::guide_axis_truncated(
@@ -253,4 +341,3 @@ girafe(
     opts_zoom(max = 1)
   )
 )
-
