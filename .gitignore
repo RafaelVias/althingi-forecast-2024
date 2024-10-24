@@ -3,3 +3,5 @@
 .RData
 .Ruserdata
 data/y_rep_draws.csv
+
+/.quarto/

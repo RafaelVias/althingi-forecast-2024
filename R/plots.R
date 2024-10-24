@@ -1,4 +1,4 @@
-source("R/data_prep.R")
+source(here("R", "data_prep.R"))
 
 # Define the color palette
 party_colors <- c(

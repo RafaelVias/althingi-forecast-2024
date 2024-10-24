@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Archiving
+and Interchange DTD v1.2 20190208//EN" "JATS-archivearticle1.dtd">
+<article xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xlink="http://www.w3.org/1999/xlink" dtd-version="1.2" article-type="other">
+  <front>
+    <article-meta>
+      <title-group>
+        <article-title>Dynamic Linear Election Model for Icelandic Parliamentary
+Elections Forecast</article-title>
+      </title-group>
+      <contrib-group>
+        <contrib contrib-type="author">
+          <name>
+            <surname>Jónsson</surname>
+            <given-names>Brynjólfur Gauti Guðrúnar</given-names>
+          </name>
+          <string-name>Brynjólfur Gauti Guðrúnar Jónsson</string-name>
+        </contrib>
+        <contrib contrib-type="author">
+          <name>
+            <surname>Vias</surname>
+            <given-names>Rafael Daniel</given-names>
+          </name>
+          <string-name>Rafael Daniel Vias</string-name>
+        </contrib>
+      </contrib-group>
+      <history/>
+    </article-meta>
+  </front>
+  <body>
+    <sec id="introduction">
+      <title>Introduction</title>
+      <p>This report outlines the methodology behind forecasting the outcome
+  of the upcoming Icelandic Parliamentary Elections scheduled for
+  November 30th. The forecast is based on a dynamic linear model
+  implemented in Stan, incorporating polling data over time and
+  adjusting for polling house effects.</p>
+    </sec>
+    <sec id="model-specification">
+      <title>Model Specification</title>
+      <p>We model the polling percentages for each political party over time
+  using a dynamic linear model with a multinomial observation component.
+  The model captures the evolution of party support and accounts for
+  variations between different polling houses.</p>
+      <sec id="notation">
+        <title>Notation</title>
+        <list list-type="bullet">
+          <list-item>
+            <p><inline-formula><alternatives><tex-math><![CDATA[P]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>P</mml:mi></mml:math></alternatives></inline-formula>:
+        Number of political parties.</p>
+          </list-item>
+          <list-item>
+            <p><inline-formula><alternatives><tex-math><![CDATA[D]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>D</mml:mi></mml:math></alternatives></inline-formula>:
+        Number of time points (dates).</p>
+          </list-item>
+          <list-item>
+            <p><inline-formula><alternatives><tex-math><![CDATA[H]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>H</mml:mi></mml:math></alternatives></inline-formula>:
+        Number of polling houses.</p>
+          </list-item>
+          <list-item>
+            <p><inline-formula><alternatives><tex-math><![CDATA[N]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>N</mml:mi></mml:math></alternatives></inline-formula>:
+        Number of observations (polls).</p>
+          </list-item>
+          <list-item>
+            <p><inline-formula><alternatives><tex-math><![CDATA[y_{n,p}]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>y</mml:mi><mml:mrow><mml:mi>n</mml:mi><mml:mo>,</mml:mo><mml:mi>p</mml:mi></mml:mrow></mml:msub></mml:math></alternatives></inline-formula>:
+        Count of responses for party <inline-formula><alternatives><tex-math><![CDATA[p]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>p</mml:mi></mml:math></alternatives></inline-formula>
+        in poll <inline-formula><alternatives><tex-math><![CDATA[n]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>n</mml:mi></mml:math></alternatives></inline-formula>.</p>
+          </list-item>
+          <list-item>
+            <p><inline-formula><alternatives><tex-math><![CDATA[\beta_{p,t}]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>β</mml:mi><mml:mrow><mml:mi>p</mml:mi><mml:mo>,</mml:mo><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math></alternatives></inline-formula>:
+        Latent support for party <inline-formula><alternatives><tex-math><![CDATA[p]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>p</mml:mi></mml:math></alternatives></inline-formula>
+        at time <inline-formula><alternatives><tex-math><![CDATA[t]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>t</mml:mi></mml:math></alternatives></inline-formula>.</p>
+          </list-item>
+          <list-item>
+            <p><inline-formula><alternatives><tex-math><![CDATA[\gamma_{p,h}]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>γ</mml:mi><mml:mrow><mml:mi>p</mml:mi><mml:mo>,</mml:mo><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math></alternatives></inline-formula>:
+        Effect of polling house <inline-formula><alternatives><tex-math><![CDATA[h]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>h</mml:mi></mml:math></alternatives></inline-formula>
+        for party <inline-formula><alternatives><tex-math><![CDATA[p]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>p</mml:mi></mml:math></alternatives></inline-formula>.</p>
+          </list-item>
+          <list-item>
+            <p><inline-formula><alternatives><tex-math><![CDATA[\sigma_p]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>σ</mml:mi><mml:mi>p</mml:mi></mml:msub></mml:math></alternatives></inline-formula>:
+        Scale parameter for the random walk of party
+        <inline-formula><alternatives><tex-math><![CDATA[p]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>p</mml:mi></mml:math></alternatives></inline-formula>.</p>
+          </list-item>
+        </list>
+      </sec>
+      <sec id="dynamic-party-effects">
+        <title>Dynamic Party Effects</title>
+        <p>The latent support for each party evolves over time following a
+    random walk:</p>
+        <p>
+          <disp-formula>
+            <alternatives>
+              <tex-math><![CDATA[
+    \beta_{p,1} = \mu_{p}, \quad \beta_{p,t} = \beta_{p,t-1} + \epsilon_{p,t} \quad \text{for } t = 2, \dots, D+1,
+    ]]></tex-math>
+              <mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="block">
+                <mml:mrow>
+                  <mml:msub>
+                    <mml:mi>β</mml:mi>
+                    <mml:mrow>
+                      <mml:mi>p</mml:mi>
+                      <mml:mo>,</mml:mo>
+                      <mml:mn>1</mml:mn>
+                    </mml:mrow>
+                  </mml:msub>
+                  <mml:mo>=</mml:mo>
+                  <mml:msub>
+                    <mml:mi>μ</mml:mi>
+                    <mml:mi>p</mml:mi>
+                  </mml:msub>
+                  <mml:mo>,</mml:mo>
+                  <mml:mspace width="1.0em"/>
+                  <mml:msub>
+                    <mml:mi>β</mml:mi>
+                    <mml:mrow>
+                      <mml:mi>p</mml:mi>
+                      <mml:mo>,</mml:mo>
+                      <mml:mi>t</mml:mi>
+                    </mml:mrow>
+                  </mml:msub>
+                  <mml:mo>=</mml:mo>
+                  <mml:msub>
+                    <mml:mi>β</mml:mi>
+                    <mml:mrow>
+                      <mml:mi>p</mml:mi>
+                      <mml:mo>,</mml:mo>
+                      <mml:mi>t</mml:mi>
+                      <mml:mo>−</mml:mo>
+                      <mml:mn>1</mml:mn>
+                    </mml:mrow>
+                  </mml:msub>
+                  <mml:mo>+</mml:mo>
+                  <mml:msub>
+                    <mml:mi>ϵ</mml:mi>
+                    <mml:mrow>
+                      <mml:mi>p</mml:mi>
+                      <mml:mo>,</mml:mo>
+                      <mml:mi>t</mml:mi>
+                    </mml:mrow>
+                  </mml:msub>
+                  <mml:mspace width="1.0em"/>
+                  <mml:mrow>
+                    <mml:mtext mathvariant="normal">for </mml:mtext>
+                    <mml:mspace width="0.333em"/>
+                  </mml:mrow>
+                  <mml:mi>t</mml:mi>
+                  <mml:mo>=</mml:mo>
+                  <mml:mn>2</mml:mn>
+                  <mml:mo>,</mml:mo>
+                  <mml:mi>…</mml:mi>
+                  <mml:mo>,</mml:mo>
+                  <mml:mi>D</mml:mi>
+                  <mml:mo>+</mml:mo>
+                  <mml:mn>1</mml:mn>
+                  <mml:mo>,</mml:mo>
+                </mml:mrow>
+              </mml:math>
+            </alternatives>
+          </disp-formula>
+        </p>
+        <p>where <inline-formula><alternatives><tex-math><![CDATA[\epsilon_{p,t} \sim \mathcal{N}(0, \sigma_p^2 \times \Delta_t)]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:msub><mml:mi>ϵ</mml:mi><mml:mrow><mml:mi>p</mml:mi><mml:mo>,</mml:mo><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>∼</mml:mo><mml:mi>𝒩</mml:mi><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:mn>0</mml:mn><mml:mo>,</mml:mo><mml:msubsup><mml:mi>σ</mml:mi><mml:mi>p</mml:mi><mml:mn>2</mml:mn></mml:msubsup><mml:mo>×</mml:mo><mml:msub><mml:mi>Δ</mml:mi><mml:mi>t</mml:mi></mml:msub><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow></mml:mrow></mml:math></alternatives></inline-formula>,
+    and <inline-formula><alternatives><tex-math><![CDATA[\Delta_t]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>Δ</mml:mi><mml:mi>t</mml:mi></mml:msub></mml:math></alternatives></inline-formula>
+    is the time difference between polls at
+    <inline-formula><alternatives><tex-math><![CDATA[t-1]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:mi>t</mml:mi><mml:mo>−</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:math></alternatives></inline-formula>
+    and <inline-formula><alternatives><tex-math><![CDATA[t]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>t</mml:mi></mml:math></alternatives></inline-formula>.</p>
+      </sec>
+      <sec id="polling-house-effects">
+        <title>Polling House Effects</title>
+        <p>Polling house effects are modeled to account for biases:</p>
+        <p>
+          <disp-formula>
+            <alternatives>
+              <tex-math><![CDATA[
+    \gamma_{p,1} = 0, \quad \sum_{h=1}^{H} \gamma_{p,h} \approx 0,
+    ]]></tex-math>
+              <mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="block">
+                <mml:mrow>
+                  <mml:msub>
+                    <mml:mi>γ</mml:mi>
+                    <mml:mrow>
+                      <mml:mi>p</mml:mi>
+                      <mml:mo>,</mml:mo>
+                      <mml:mn>1</mml:mn>
+                    </mml:mrow>
+                  </mml:msub>
+                  <mml:mo>=</mml:mo>
+                  <mml:mn>0</mml:mn>
+                  <mml:mo>,</mml:mo>
+                  <mml:mspace width="1.0em"/>
+                  <mml:munderover>
+                    <mml:mo>∑</mml:mo>
+                    <mml:mrow>
+                      <mml:mi>h</mml:mi>
+                      <mml:mo>=</mml:mo>
+                      <mml:mn>1</mml:mn>
+                    </mml:mrow>
+                    <mml:mi>H</mml:mi>
+                  </mml:munderover>
+                  <mml:msub>
+                    <mml:mi>γ</mml:mi>
+                    <mml:mrow>
+                      <mml:mi>p</mml:mi>
+                      <mml:mo>,</mml:mo>
+                      <mml:mi>h</mml:mi>
+                    </mml:mrow>
+                  </mml:msub>
+                  <mml:mo>≈</mml:mo>
+                  <mml:mn>0</mml:mn>
+                  <mml:mo>,</mml:mo>
+                </mml:mrow>
+              </mml:math>
+            </alternatives>
+          </disp-formula>
+        </p>
+        <p>where election results are assigned to the the first polling
+    house and therefore the first polling house’s effect is set to zero.
+    A soft sum-to-zero constraint is applied to the remaining effects to
+    allow for small amounts of industry-level bias.</p>
+      </sec>
+    </sec>
+    <sec id="data-and-likelihood">
+      <title>Data and Likelihood</title>
+      <p>The observed counts <inline-formula><alternatives><tex-math><![CDATA[y_{n} = (y_{n,1}, \dots, y_{n,P})]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:msub><mml:mi>y</mml:mi><mml:mi>n</mml:mi></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:msub><mml:mi>y</mml:mi><mml:mrow><mml:mi>n</mml:mi><mml:mo>,</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>…</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mi>y</mml:mi><mml:mrow><mml:mi>n</mml:mi><mml:mo>,</mml:mo><mml:mi>P</mml:mi></mml:mrow></mml:msub><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow></mml:mrow></mml:math></alternatives></inline-formula>
+  are modeled using a multinomial distribution with a logit link:</p>
+      <p>
+        <disp-formula>
+          <alternatives>
+            <tex-math><![CDATA[
+  y_{n} \sim \text{Multinomial}\left(  \sum_{p=1}^P y_{n, p}, \text{softmax}\left( \eta_{n} \right) \right),
+  ]]></tex-math>
+            <mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="block">
+              <mml:mrow>
+                <mml:msub>
+                  <mml:mi>y</mml:mi>
+                  <mml:mi>n</mml:mi>
+                </mml:msub>
+                <mml:mo>∼</mml:mo>
+                <mml:mtext mathvariant="normal">Multinomial</mml:mtext>
+                <mml:mrow>
+                  <mml:mo stretchy="true" form="prefix">(</mml:mo>
+                  <mml:munderover>
+                    <mml:mo>∑</mml:mo>
+                    <mml:mrow>
+                      <mml:mi>p</mml:mi>
+                      <mml:mo>=</mml:mo>
+                      <mml:mn>1</mml:mn>
+                    </mml:mrow>
+                    <mml:mi>P</mml:mi>
+                  </mml:munderover>
+                  <mml:msub>
+                    <mml:mi>y</mml:mi>
+                    <mml:mrow>
+                      <mml:mi>n</mml:mi>
+                      <mml:mo>,</mml:mo>
+                      <mml:mi>p</mml:mi>
+                    </mml:mrow>
+                  </mml:msub>
+                  <mml:mo>,</mml:mo>
+                  <mml:mtext mathvariant="normal">softmax</mml:mtext>
+                  <mml:mrow>
+                    <mml:mo stretchy="true" form="prefix">(</mml:mo>
+                    <mml:msub>
+                      <mml:mi>η</mml:mi>
+                      <mml:mi>n</mml:mi>
+                    </mml:msub>
+                    <mml:mo stretchy="true" form="postfix">)</mml:mo>
+                  </mml:mrow>
+                  <mml:mo stretchy="true" form="postfix">)</mml:mo>
+                </mml:mrow>
+                <mml:mo>,</mml:mo>
+              </mml:mrow>
+            </mml:math>
+          </alternatives>
+        </disp-formula>
+      </p>
+      <p>where <inline-formula><alternatives><tex-math><![CDATA[\eta_{n} = (\beta_{1, t_n} + \gamma_{1, h_n}, \dots, \beta_{P, t_n} + \gamma_{P, h_n})]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:msub><mml:mi>η</mml:mi><mml:mi>n</mml:mi></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:msub><mml:mi>β</mml:mi><mml:mrow><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:msub><mml:mi>t</mml:mi><mml:mi>n</mml:mi></mml:msub></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mi>γ</mml:mi><mml:mrow><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:msub><mml:mi>h</mml:mi><mml:mi>n</mml:mi></mml:msub></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>…</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mi>β</mml:mi><mml:mrow><mml:mi>P</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mi>t</mml:mi><mml:mi>n</mml:mi></mml:msub></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mi>γ</mml:mi><mml:mrow><mml:mi>P</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mi>h</mml:mi><mml:mi>n</mml:mi></mml:msub></mml:mrow></mml:msub><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow></mml:mrow></mml:math></alternatives></inline-formula>,
+  <inline-formula><alternatives><tex-math><![CDATA[t_n]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>t</mml:mi><mml:mi>n</mml:mi></mml:msub></mml:math></alternatives></inline-formula>
+  is the date of poll <inline-formula><alternatives><tex-math><![CDATA[n]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>n</mml:mi></mml:math></alternatives></inline-formula>,
+  and <inline-formula><alternatives><tex-math><![CDATA[h_n]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>h</mml:mi><mml:mi>n</mml:mi></mml:msub></mml:math></alternatives></inline-formula>
+  is the polling house of poll <inline-formula><alternatives><tex-math><![CDATA[n]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mi>n</mml:mi></mml:math></alternatives></inline-formula>.</p>
+    </sec>
+    <sec id="prior-distributions">
+      <title>Prior Distributions</title>
+      <p>The priors are specified as follows:</p>
+      <list list-type="bullet">
+        <list-item>
+          <p>Initial party effects: <inline-formula><alternatives><tex-math><![CDATA[\beta_{0,p} \sim \mathcal{N}(0, 1)]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:msub><mml:mi>β</mml:mi><mml:mrow><mml:mn>0</mml:mn><mml:mo>,</mml:mo><mml:mi>p</mml:mi></mml:mrow></mml:msub><mml:mo>∼</mml:mo><mml:mi>𝒩</mml:mi><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:mn>0</mml:mn><mml:mo>,</mml:mo><mml:mn>1</mml:mn><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow></mml:mrow></mml:math></alternatives></inline-formula>.</p>
+        </list-item>
+        <list-item>
+          <p>Random walk innovations: <inline-formula><alternatives><tex-math><![CDATA[\epsilon_{p,t} \sim \mathcal{N}(0, \sigma_p^2 \times \Delta_t^2)]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:msub><mml:mi>ϵ</mml:mi><mml:mrow><mml:mi>p</mml:mi><mml:mo>,</mml:mo><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>∼</mml:mo><mml:mi>𝒩</mml:mi><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:mn>0</mml:mn><mml:mo>,</mml:mo><mml:msubsup><mml:mi>σ</mml:mi><mml:mi>p</mml:mi><mml:mn>2</mml:mn></mml:msubsup><mml:mo>×</mml:mo><mml:msubsup><mml:mi>Δ</mml:mi><mml:mi>t</mml:mi><mml:mn>2</mml:mn></mml:msubsup><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow></mml:mrow></mml:math></alternatives></inline-formula>.</p>
+        </list-item>
+        <list-item>
+          <p>Polling house effects: <inline-formula><alternatives><tex-math><![CDATA[\gamma_{p,h} \sim \mathcal{N}(0, 1)]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:msub><mml:mi>γ</mml:mi><mml:mrow><mml:mi>p</mml:mi><mml:mo>,</mml:mo><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>∼</mml:mo><mml:mi>𝒩</mml:mi><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:mn>0</mml:mn><mml:mo>,</mml:mo><mml:mn>1</mml:mn><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow></mml:mrow></mml:math></alternatives></inline-formula>,
+      with <inline-formula><alternatives><tex-math><![CDATA[\sum_{h} \gamma_{p,h} \sim \mathcal{N}(0, \sigma_{\text{house}} \sqrt{H - 1})]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:msub><mml:mo>∑</mml:mo><mml:mi>h</mml:mi></mml:msub><mml:msub><mml:mi>γ</mml:mi><mml:mrow><mml:mi>p</mml:mi><mml:mo>,</mml:mo><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>∼</mml:mo><mml:mi>𝒩</mml:mi><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:mn>0</mml:mn><mml:mo>,</mml:mo><mml:msub><mml:mi>σ</mml:mi><mml:mtext mathvariant="normal">house</mml:mtext></mml:msub><mml:msqrt><mml:mrow><mml:mi>H</mml:mi><mml:mo>−</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msqrt><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow></mml:mrow></mml:math></alternatives></inline-formula>
+      as a soft constraint.</p>
+        </list-item>
+        <list-item>
+          <p>Scale parameters: <inline-formula><alternatives><tex-math><![CDATA[\sigma_p \sim \text{Exponential}(1)]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:mrow><mml:msub><mml:mi>σ</mml:mi><mml:mi>p</mml:mi></mml:msub><mml:mo>∼</mml:mo><mml:mtext mathvariant="normal">Exponential</mml:mtext><mml:mrow><mml:mo stretchy="true" form="prefix">(</mml:mo><mml:mn>1</mml:mn><mml:mo stretchy="true" form="postfix">)</mml:mo></mml:mrow></mml:mrow></mml:math></alternatives></inline-formula>.</p>
+        </list-item>
+      </list>
+    </sec>
+    <sec id="inference">
+      <title>Inference</title>
+      <p>Bayesian inference is performed using Markov Chain Monte Carlo
+  (MCMC) sampling via Stan. Posterior distributions of the latent
+  variables <inline-formula><alternatives><tex-math><![CDATA[\beta_{p,t}]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>β</mml:mi><mml:mrow><mml:mi>p</mml:mi><mml:mo>,</mml:mo><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math></alternatives></inline-formula>
+  and <inline-formula><alternatives><tex-math><![CDATA[\gamma_{p,h}]]></tex-math><mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="inline"><mml:msub><mml:mi>γ</mml:mi><mml:mrow><mml:mi>p</mml:mi><mml:mo>,</mml:mo><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math></alternatives></inline-formula>
+  are obtained, allowing for probabilistic forecasting of election
+  outcomes.</p>
+    </sec>
+    <sec id="posterior-predictive-checks">
+      <title>Posterior Predictive Checks</title>
+      <p>To assess the model’s fit, posterior predictive simulations are
+  conducted:</p>
+      <p>
+        <disp-formula>
+          <alternatives>
+            <tex-math><![CDATA[
+  y_{\text{rep}, d} \sim \text{Multinomial}\left( n_{\text{pred}}, \text{softmax}\left( \beta_{:, d} \right) \right), \quad d = 1, \dots, D+1.
+  ]]></tex-math>
+            <mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" display="block">
+              <mml:mrow>
+                <mml:msub>
+                  <mml:mi>y</mml:mi>
+                  <mml:mrow>
+                    <mml:mtext mathvariant="normal">rep</mml:mtext>
+                    <mml:mo>,</mml:mo>
+                    <mml:mi>d</mml:mi>
+                  </mml:mrow>
+                </mml:msub>
+                <mml:mo>∼</mml:mo>
+                <mml:mtext mathvariant="normal">Multinomial</mml:mtext>
+                <mml:mrow>
+                  <mml:mo stretchy="true" form="prefix">(</mml:mo>
+                  <mml:msub>
+                    <mml:mi>n</mml:mi>
+                    <mml:mtext mathvariant="normal">pred</mml:mtext>
+                  </mml:msub>
+                  <mml:mo>,</mml:mo>
+                  <mml:mtext mathvariant="normal">softmax</mml:mtext>
+                  <mml:mrow>
+                    <mml:mo stretchy="true" form="prefix">(</mml:mo>
+                    <mml:msub>
+                      <mml:mi>β</mml:mi>
+                      <mml:mrow>
+                        <mml:mo>:</mml:mo>
+                        <mml:mo>,</mml:mo>
+                        <mml:mi>d</mml:mi>
+                      </mml:mrow>
+                    </mml:msub>
+                    <mml:mo stretchy="true" form="postfix">)</mml:mo>
+                  </mml:mrow>
+                  <mml:mo stretchy="true" form="postfix">)</mml:mo>
+                </mml:mrow>
+                <mml:mo>,</mml:mo>
+                <mml:mspace width="1.0em"/>
+                <mml:mi>d</mml:mi>
+                <mml:mo>=</mml:mo>
+                <mml:mn>1</mml:mn>
+                <mml:mo>,</mml:mo>
+                <mml:mi>…</mml:mi>
+                <mml:mo>,</mml:mo>
+                <mml:mi>D</mml:mi>
+                <mml:mo>+</mml:mo>
+                <mml:mn>1</mml:mn>
+                <mml:mi>.</mml:mi>
+              </mml:mrow>
+            </mml:math>
+          </alternatives>
+        </disp-formula>
+      </p>
+      <p>These simulations generate replicated data under the model to
+  compare with the observed data.</p>
+    </sec>
+    <sec id="conclusion">
+      <title>Conclusion</title>
+      <p>The dynamic linear model effectively captures the temporal
+  evolution of party support and adjusts for polling house biases. By
+  leveraging Bayesian methods, we obtain a comprehensive probabilistic
+  forecast of the election outcomes, accounting for uncertainty in the
+  estimates.</p>
+    </sec>
+  </body>
+  <back>
+</back>
+</article>

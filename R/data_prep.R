@@ -2,6 +2,7 @@
 require(tidyverse)
 require(lubridate)
 require(janitor)
+library(here)
 
 
 # Function to convert string to numeric, replacing comma with dot
@@ -78,8 +79,8 @@ clean_gallup_party_support <- function(file_path) {
 
 
 # Read and clean the datasets
-gallup_party_support <- clean_gallup_party_support("data-raw/gallup/fylgi_flokka_eftir_mánuðum.csv")
+gallup_party_support <- clean_gallup_party_support(here("data-raw", "gallup", "fylgi_flokka_eftir_manudum.csv"))
 
 
 # Save the processed data
-write_csv(gallup_party_support, "data/gallup_party_support.csv")
+write_csv(gallup_party_support, here("data", "gallup_party_support.csv"))

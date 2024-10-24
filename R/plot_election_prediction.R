@@ -5,6 +5,7 @@ library(patchwork)
 library(here)
 library(arrow)
 library(glue)
+library(ggtext)
 Sys.setlocale("LC_ALL", "is_IS.UTF-8")
 
 theme_set(theme_metill())
@@ -45,15 +46,16 @@ coverage_data <- read_parquet(here("data", "y_rep_draws.parquet")) |>
     colors
   )
 
-coverage_data |>
+p <- coverage_data |>
   filter(
     dags == max(dags)
   ) |>
   mutate(
-    flokkur = fct_reorder(flokkur, mean)
+    flokkur_ordered = glue("<b style='color:{litur}'>{flokkur}</b>"),
+    flokkur_ordered = fct_reorder(flokkur_ordered, mean)
   ) |>
   ggplot(aes(
-    y = flokkur,
+    y = flokkur_ordered,
     color = litur,
     group = paste(flokkur, coverage)
   )) +
@@ -69,15 +71,35 @@ coverage_data |>
     aes(
       x = mean,
       xend = mean,
-      y = as.integer(flokkur) - 0.4,
-      yend = as.integer(flokkur) + 0.4
+      y = as.integer(flokkur_ordered) - 0.4,
+      yend = as.integer(flokkur_ordered) + 0.4
     ),
-    linewidth = 1.
+    linewidth = 1
+  ) +
+  geom_segment(
+    aes(
+      x = lower,
+      xend = lower,
+      y = as.integer(flokkur_ordered) - 0.2,
+      yend = as.integer(flokkur_ordered) + 0.2,
+      alpha = -coverage
+    ),
+    linewidth = 0.2
+  ) +
+  geom_segment(
+    aes(
+      x = upper,
+      xend = upper,
+      y = as.integer(flokkur_ordered) - 0.2,
+      yend = as.integer(flokkur_ordered) + 0.2,
+      alpha = -coverage
+    ),
+    linewidth = 0.2
   ) +
   scale_color_identity() +
   scale_x_continuous(
     labels = label_percent(),
-    limits = c(0, NA),
+    limits = c(0, 0.3),
     guide = ggh4x::guide_axis_truncated(
       trunc_lower = 0,
       trunc_upper = 0.30
@@ -87,18 +109,25 @@ coverage_data |>
     guide = ggh4x::guide_axis_truncated()
   ) +
   scale_alpha_continuous(
-    range = c(0, 0.2)
-  ) +
-  coord_fixed(
-    ratio = 0.01
+    range = c(0, 0.3)
   ) +
   theme(
-    legend.position = "none"
+    legend.position = "none",
+    axis.text.y = element_markdown(size = 12)
   ) +
   labs(
     x = NULL,
     y = NULL,
-    title = glue("Fylgispá þegar {days_until_vote} dagar eru til kosninga"),
+    title = glue("Fylgisspá þegar {days_until_vote} dagar eru til kosninga"),
     subtitle = "Línustrik tákna miðgildi spár og hver kassi inniheldur 5% af niðurstöðum spár",
     caption = caption
   )
+
+p
+
+ggsave(
+  here("Figures", "Preds", glue("election_prediction_{today_date}.png")),
+  width = 8,
+  height = 0.4 * 8,
+  scale = 1.4
+)

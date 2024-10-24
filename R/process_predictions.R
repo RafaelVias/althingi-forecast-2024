@@ -1,7 +1,8 @@
 library(tidyverse)
 library(googlesheets4)
+library(arrow)
 
-dhondt <- function(votes, n_seats = 63) {
+dhondt <- function(votes, n_seats = 63, return_seats = TRUE) {
   n_seats <- unique(n_seats)
   party_seats <- numeric(length(votes))
   temp_votes <- votes
@@ -12,26 +13,39 @@ dhondt <- function(votes, n_seats = 63) {
     temp_votes[which_max] <- votes[which_max] / (party_seats[which_max] + 1)
   }
 
-  party_seats
+  if (return_seats) {
+    return(party_seats)
+  }
+  temp_votes
 }
 
-jofnunarsaeti <- function(seats, votes) {
+jofnunarsaeti <- function(seats, votes, n_seats = 9) {
   n_seats <- 9
   assigned_seats <- 0
-
+  jofnun_seats <- numeric(length(seats))
+  perc_votes <- votes / sum(votes)
+  too_low <- perc_votes < 0.05
+  votes[too_low] <- 0
   while (assigned_seats < n_seats) {
-    perc_votes <- votes / sum(votes)
-    too_low <- perc_votes < 0.05
-    perc_votes[too_low] <- 0
-    perc_seats <- seats / sum(seats)
-    diff <- perc_votes - perc_seats
+    diff <- votes / seats
     which_max <- which.max(diff)
     seats[which_max] <- seats[which_max] + 1
+    jofnun_seats[which_max] <- jofnun_seats[which_max] + 1
     assigned_seats <- assigned_seats + 1
   }
 
-  seats
+  jofnun_seats
 }
+
+seats_tibble <- tribble(
+  ~kjordaemi, ~n_seats, ~n_jofnun,
+  "Reykjavík Suður", 9, 2,
+  "Reykjavík Norður", 9, 2,
+  "Suðvestur", 11, 2,
+  "Suður", 9, 1,
+  "Norðaustur", 9, 1,
+  "Norðvestur", 7, 1
+)
 
 gs4_auth()
 
@@ -68,10 +82,12 @@ maskina_kjordaemi <- read_sheet(
     .by = flokkur
   )
 
-y_rep <- read_csv("data/y_rep_draws.csv") |>
+y_rep <- read_parquet("data/y_rep_draws.parquet") |>
   filter(dags == max(dags))
 
+
 d <- y_rep |>
+  filter(.draw <= 1) |>
   mutate(
     value = value / sum(value),
     .by = c(.draw, .iteration, .chain)
@@ -89,26 +105,91 @@ d <- y_rep |>
     by = join_by(kjordaemi, aldur)
   ) |>
   mutate(
-    value_raw = value,
-    value_kjosendur = value * n_kjosendur,
     value = value * p_aldur * p_kjordaemi * n_kjosendur
   )
 
-seats_tibble <- tribble(
-  ~kjordaemi, ~n_seats,
-  "Reykjavík Suður", 9,
-  "Reykjavík Norður", 9,
-  "Suðvestur", 10,
-  "Suður", 9,
-  "Norðvestur", 8,
-  "Norðaustur", 9
-)
+d |>
+  summarise(
+    votes = sum(value),
+    .by = c(.draw, flokkur, kjordaemi)
+  ) |>
+  nest(data = c(flokkur, votes)) |>
+  inner_join(seats_tibble) |>
+  mutate(
+    data = pmap(
+      list(data, n_seats),
+      function(data, n_seats, n_jofnun) {
+        votes <- data$votes
+        party_seats <- numeric(length(votes))
+        temp_votes <- votes
+
+        while (sum(party_seats) < n_seats) {
+          which_max <- which.max(temp_votes)
+          party_seats[which_max] <- party_seats[which_max] + 1
+          temp_votes[which_max] <- votes[which_max] / (party_seats[which_max] + 1)
+        }
+
+        data <- data |>
+          mutate(
+            assigned_seats = party_seats,
+            resid_votes = temp_votes
+          )
+      }
+    )
+  ) |>
+  select(-n_seats) |>
+  unnest(data) |>
+  mutate(
+    country_votes = sum(votes),
+    country_seats = sum(assigned_seats),
+    .by = c(.draw, flokkur)
+  ) |>
+  nest(
+    data = c(-.draw, -flokkur, -country_votes, -country_seats)
+  ) |>
+  mutate(
+    assigned_jofnun_total = jofnunarsaeti(country_seats, country_votes),
+    .by = .draw
+  ) |>
+  unnest(data) |>
+  mutate(
+    resid_perc_votes = resid_votes / sum(resid_votes),
+    .by = c(kjordaemi)
+  )
+nest(data = c(-.draw)) |>
+  mutate(
+    data = map(
+      data,
+      function(data) {
+        assigned_jofnun_total <- data$assigned_jofnun_total
+        while (any(assigned_jofnun_total > 0)) {
+          data |>
+            mutate(
+              resid_perc_votes = resid_votes / sum(resid_votes),
+              .by = c(kjordaemi)
+            ) |>
+            mutate(
+              assigned_jofnun = 1 * (assigned_jofnun_total > 0) * (resid_perc_votes == max(resid_perc_votes)),
+              .by = flokkur
+            )
+        }
+      }
+    )
+  )
+mutate(
+  resid_perc_votes = resid_votes / sum(resid_votes),
+  .by = c(.draw, kjordaemi)
+) |>
+  mutate(
+    assigned_jofnun = 1 * (assigned_jofnun_total > 0) * (resid_perc_votes == max(resid_perc_votes)),
+    .by = c(.draw, flokkur)
+  ) |>
+  View()
+
 
 plot_dat <- d |>
   summarise(
     value = sum(value),
-    value_raw = sum(value_raw),
-    value_kjosendur = sum(value_kjosendur),
     .by = c(flokkur, .draw, kjordaemi)
   ) |>
   inner_join(
@@ -121,27 +202,22 @@ plot_dat <- d |>
   ) |>
   summarise(
     total_votes = sum(value),
-    total_votes_raw = sum(value_raw),
-    total_votes_kjosendur = sum(value_kjosendur),
     total_seats = sum(seats),
     .by = c(.draw, flokkur)
   ) |>
   mutate(
-    seats = jofnunarsaeti(total_seats, total_votes),
+    jofnun_seats = jofnunarsaeti(total_seats, total_votes),
+    seats = total_seats + jofnun_seats,
     .by = c(.draw)
   ) |>
   summarise(
     mean_seats = mean(seats),
     mean_raw_seats = mean(total_seats),
     mean_votes = mean(total_votes),
-    mean_raw_votes = mean(total_votes_raw),
-    mean_kjosendur_votes = mean(total_votes_kjosendur),
     .by = flokkur
   ) |>
   mutate(
-    p_votes = mean_votes / sum(mean_votes),
-    p_raw_votes = mean_raw_votes / sum(mean_raw_votes),
-    p_kjosendur_votes = mean_kjosendur_votes / sum(mean_kjosendur_votes)
+    p_votes = mean_votes / sum(mean_votes)
   ) |>
   mutate(
     flokkur = fct_reorder(flokkur, p_votes)

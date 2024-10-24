@@ -33,10 +33,10 @@ transformed parameters {
   for (p in 1:P) {
     beta[p, 1] = beta_0[p];
     for (t in 2:D) {
-      beta[p, t] = beta[p, t - 1] + z_beta[p, t] * sigma[p] * time_diff[t - 1];
+      beta[p, t] = beta[p, t - 1] + z_beta[p, t] * sigma[p] * sqrt(time_diff[t - 1]);
     }
 
-    beta[p, D + 1] = beta[p, D] + z_beta[p, D + 1] * sigma[p] * pred_y_time_diff;
+    beta[p, D + 1] = beta[p, D] + z_beta[p, D + 1] * sigma[p] * sqrt(pred_y_time_diff);
   }
 }
 

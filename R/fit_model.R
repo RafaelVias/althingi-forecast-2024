@@ -248,7 +248,6 @@ y_rep_draws <- fit$draws("y_rep") |>
     value = value / stan_data$n_pred
   )
 
-write_csv(y_rep_draws, here("data", "y_rep_draws.csv"))
 write_parquet(y_rep_draws, here("data", "y_rep_draws.parquet"))
 
 theme_set(metill::theme_metill())
@@ -304,14 +303,3 @@ fit$summary("gamma_raw") |>
     mean = mean(mean),
     .by = flokkur
   )
-
-
-fit$summary("gamma_raw") |>
-  select(variable, mean) |>
-  mutate(
-    p = str_match(variable, "gamma_raw\\[(.*),.*\\]")[, 2] |> parse_number(),
-    h = str_match(variable, "gamma_raw\\[.*,(.*)\\]")[, 2] |> parse_number(),
-    flokkur = colnames(y)[p],
-    fyrirtaeki = unique(data$fyrirtaeki)[h + 1]
-  ) |>
-  View()
